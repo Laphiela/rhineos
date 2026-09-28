@@ -320,6 +320,33 @@ export async function startRhineosBackend(opts = {}) {
   });
   app.post("/api/power/reboot", (_req, res) => res.json({ ok: true }));
 
+  // 宿主机电源操作(WSL 直接执行 Windows 可执行文件)
+  const WIN = "/mnt/c/Windows/System32";
+  function powerHost(action) {
+    const table = {
+      lock: [`${WIN}/rundll32.exe`, ["user32.dll,LockWorkStation"]],
+      sleep: [`${WIN}/rundll32.exe`, ["powrprof.dll,SetSuspendState", "0,1,0"]],
+      hibernate: [`${WIN}/shutdown.exe`, ["/h", "/t", "0"]],
+    };
+    const entry = table[action];
+    if (!entry) throw new Error("未知电源操作: " + action);
+    const child = spawn(entry[0], entry[1], { detached: true, stdio: "ignore" });
+    child.unref();
+    return { ok: true, action };
+  }
+  app.post("/api/power/lock", (_req, res) => {
+    try { res.json(powerHost("lock")); }
+    catch (e) { res.status(400).json({ error: e.message }); }
+  });
+  app.post("/api/power/sleep", (_req, res) => {
+    try { res.json(powerHost("sleep")); }
+    catch (e) { res.status(400).json({ error: e.message }); }
+  });
+  app.post("/api/power/hibernate", (_req, res) => {
+    try { res.json(powerHost("hibernate")); }
+    catch (e) { res.status(400).json({ error: e.message }); }
+  });
+
   // 静态托管前端构建产物
   app.use(express.static(distDir, { maxAge: "1h", setHeaders: (res, p) => { if (p.endsWith(".html")) res.setHeader("Cache-Control", "no-cache"); } }));
   app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(join(distDir, "index.html")));

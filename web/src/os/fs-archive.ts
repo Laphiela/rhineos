@@ -8,8 +8,18 @@ import { osEnabled, osHostInfo } from "./desktop";
 
 // api 客户端的 fs 命名空间在 DesktopApi 类型之外,这里从 api 对象上解构
 const fsList = (path: string) => (api as unknown as { list: (p: string) => Promise<{ path: string; items: FsEntry[] }> }).list(path);
+const fsRead = (path: string) => (api as unknown as { read: (p: string) => Promise<{ path: string; binary: boolean; content: string }> }).read(path);
 
 const FS_COLUMNS = ["目录", "文档", "图片", "代码", "其他"];
+let cwd = ""; // 当前浏览目录(档案终端即文件系统导航)
+
+/** 该档案记录是否为真实目录(目录记录 = 可进入)。 */
+export function isFsDirectoryRecord(r: ArchiveRecord): boolean {
+  return r.lead === "DIRECTORY" && Boolean(r.source);
+}
+
+/** 当前浏览目录。 */
+export function fsCwd(): string { return cwd; }
 const MAX_RECORDS = 12;
 const MAX_TITLE = 12;
 
@@ -43,18 +53,39 @@ function leadOf(entry: FsEntry): string {
   return "DATA FILE";
 }
 
+function dirnameOf(p: string): string {
+  const cut = p.replace(/\/+$/, "").lastIndexOf("/");
+  return cut <= 0 ? "" : p.slice(0, cut);
+}
+
+/** 文本内容预览(前 ~28 行,超宽截断);二进制/读取失败返回空。 */
+async function previewText(path: string): Promise<string[]> {
+  try {
+    const f = await fsRead(path);
+    if (f.binary) return [];
+    return f.content
+      .split("\n")
+      .slice(0, 28)
+      .map(l => l.length > 160 ? l.slice(0, 160) + "…" : l);
+  } catch { return []; }
+}
+
 function truncateTitle(name: string): string {
   const base = name.replace(/\.[^.]+$/, "") || name;
   return base.length <= MAX_TITLE ? base : base.slice(0, MAX_TITLE - 1) + "…";
 }
 
-/** 拉取 HOME 顶层条目并整体替换档案数据集;失败时保持原版虚构档案。 */
-export async function applyFsDataset(): Promise<boolean> {
+/** 列出目录并整体替换档案数据集(档案终端即文件系统导航);失败保持现有数据。
+ * 目录记录(openFile 进入)自带"返回上级"行;文件记录带真实内容预览。 */
+export async function applyFsDataset(dir?: string): Promise<boolean> {
   if (!osEnabled()) return false;
   const home = osHostInfo()?.home;
   if (!home) return false;
+  const target = dir || cwd || home;
   try {
-    const list = await fsList(home);
+    const list = await fsList(target);
+    cwd = list.path;
+    const parentPath = dirnameOf(cwd);
     const entries = [...list.items]
       .sort((a, b) => {
         const d = (a.type === "dir" ? 0 : 1) - (b.type === "dir" ? 0 : 1);
@@ -65,46 +96,55 @@ export async function applyFsDataset(): Promise<boolean> {
     if (entries.length < FS_COLUMNS.length) return false; // 列多于条目,无法保证每列非空,放弃耦合
 
     // 场景按「5 列 × 固定槽位」构建,空列会取到 undefined 而崩;
-    // 分桶后必须保证每列 ≥1 条:从最多的列调配给空列。
+    // 分桶后必须保证每列 ≥1 条:从最多的列调配给空列。父级行不参与分桶。
     const buckets: FsEntry[][] = FS_COLUMNS.map(() => []);
     for (const entry of entries) buckets[bucketOf(entry.name, entry.type)].push(entry);
     for (let c = 0; c < FS_COLUMNS.length; c++) {
       if (buckets[c].length) continue;
       let richest = 0;
       for (let i = 1; i < buckets.length; i++) if (buckets[i].length > buckets[richest].length) richest = i;
-      if (buckets[richest].length < 2) return false; // 无可调配,放弃耦合
+      if (buckets[richest].length < 2) break; // 无可调配:允许更少条目(有 updateSelection 守卫)
       const moved = buckets[richest].pop()!;
       buckets[c].push(moved);
     }
+    if (parentPath) buckets[0].unshift({ name: "..", type: "dir", size: 0, mtime: 0 });
     const ordered: FsEntry[] = buckets.flat();
+    void MAX_RECORDS;
 
-    const recs: ArchiveRecord[] = ordered.map((entry, i) => {
-      const path = `${list.path.replace(/\/$/, "")}/${entry.name}`;
+    const recs: ArchiveRecord[] = [];
+    for (const [i, entry] of ordered.entries()) {
+      const isParent = entry.name === "..";
+      const path = isParent ? parentPath : `${list.path.replace(/\/$/, "")}/${entry.name}`;
       const bucket = FS_COLUMNS[bucketOf(entry.name, entry.type)];
       const mtimeText = new Date(entry.mtime).toLocaleString("zh-CN", { hour12: false });
       const findings = [
         `FULL PATH:${path}`,
-        `KIND:${entry.type === "dir" ? "目录" : entry.type === "link" ? "符号链接" : "常规文件"}`,
+        `KIND:${entry.type === "dir" ? (isParent ? "父目录" : "目录") : entry.type === "link" ? "符号链接" : "常规文件"}`,
         `SIZE:${entry.type === "dir" ? "—" : formatBytes(entry.size)}`,
         `MTIME:${mtimeText}`,
-        `访问途径:桌面「文件」应用 / 终端`,
+        isParent ? `ACTION:读取 = 返回上级` : entry.type === "dir" ? `ACTION:读取 = 进入目录` : `ACTION:读取 = 内容预览(亦可经「文件」应用编辑)`,
       ];
-      return {
+      if (!entry.type.startsWith("dir") && entry.size > 0 && entry.size <= 256 * 1024) {
+        const preview = await previewText(path);
+        if (preview.length) findings.push(`PREVIEW / 内容预览 ─`, ...preview);
+      }
+      const rec: ArchiveRecord = {
         id: `FS-${String(i + 1).padStart(3, "0")}`,
-        title: truncateTitle(entry.name),
-        en: entry.name.toUpperCase().slice(0, 32),
-        department: "HOME",
+        title: isParent ? "返回上级" : truncateTitle(entry.name),
+        en: isParent ? "PARENT DIRECTORY" : entry.name.toUpperCase().slice(0, 32),
+        department: "FS",
         category: bucket,
         date: new Date(entry.mtime).toISOString().slice(0, 10),
         lead: leadOf(entry),
         clearance: "REAL FILESYSTEM",
-        abstract: `${leadOf(entry)} · ${entry.type === "dir" ? "内容见「文件」应用" : formatBytes(entry.size)} · 修改于 ${mtimeText}`,
+        abstract: `${leadOf(entry)} · ${entry.type === "dir" ? (isParent ? parentPath : "读取进入") : formatBytes(entry.size)} · 修改于 ${mtimeText}`,
         findings,
         source: path,
       };
-    });
+      recs.push(rec);
+    }
     setDataset(recs, FS_COLUMNS);
-    console.info(`[rhineos] 档案终端已耦合真实文件系统:${recs.length} 条(根:${list.path})`);
+    console.info(`[rhineos] 档案终端已耦合真实文件系统:${recs.length} 条(${cwd})`);
     return true;
   } catch (error) {
     console.warn("[rhineos] 文件系统档案耦合失败,保留原版数据集:", (error as Error)?.message ?? error);

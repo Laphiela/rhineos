@@ -148,7 +148,8 @@ async function driveToDesktop(timeoutMs = 180000) {
         "executeJavaScript",
       );
     } catch { /* 渲染进程未就绪,继续等 */ }
-    if (state?.mode === "desktop") return state;
+    // archive 即桌面(档案终端落点形态),两种 mode 都算就绪
+    if (state?.mode === "desktop" || state?.mode === "archive") return state;
     if (state && Date.now() - lastClickAt > 2500) {
       // 优先级:门禁在场只碰门禁(无声入口优先),门禁退场后才允许点跳过按钮
       const target = state.gateSilent ? ".entry-silent"

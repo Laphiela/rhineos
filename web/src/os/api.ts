@@ -60,6 +60,7 @@ export const api = {
   killApp: (id: string) => post("/api/apps/kill", { id }),
 
   shutdown: () => post("/api/power/shutdown", {}),
+  powerHost: (action: "lock" | "sleep" | "hibernate") => post(`/api/power/${action}`, {}),
 };
 
 /** 订阅周期指标(SSE 语义退化为轮询,2s 间隔足够桌面级仪表)。 */

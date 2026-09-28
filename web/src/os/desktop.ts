@@ -13,6 +13,7 @@ import { escapeHtml } from "../html";
 
 export type DesktopCallbacks = OSCallbacks & {
   enterArchives: () => void; // 切入原版三维档案终端(setMode("archive"))
+  setTheme: (dark: boolean) => void; // 与主应用同一主题路径(prefs + scene.setTheme)
 };
 let hostInfo: HostInfo | null = null;
 let backendUp = false;
@@ -124,6 +125,15 @@ function buildShell() {
       <button class="os-dock-btn" data-app="about"><span class="os-dock-glyph">⌗</span><small>关于</small></button>
       <button class="os-dock-btn power" data-app="power"><span class="os-dock-glyph">⏻</span><small>电源</small></button>
     </nav>
+    <nav class="os-archive-dock" aria-label="桌面功能" hidden>
+      <button class="os-archive-btn" data-app="terminal" aria-label="终端"><span>⌁</span><small>终端</small></button>
+      <button class="os-archive-btn" data-app="files" aria-label="文件"><span>▤</span><small>文件</small></button>
+      <button class="os-archive-btn" data-app="monitor" aria-label="监控"><span>∿</span><small>监控</small></button>
+      <button class="os-archive-btn" data-app="launchpad" aria-label="应用"><span>⋯</span><small>应用</small></button>
+      <span class="os-dock-rule" aria-hidden="true"></span>
+      <button class="os-archive-btn" data-app="settings" aria-label="设置"><span>◷</span><small>设置</small></button>
+      <button class="os-archive-btn power" data-app="power" aria-label="电源"><span>⏻</span><small>电源</small></button>
+    </nav>
     <div class="os-toast" role="status" hidden></div>
   `;
 
@@ -144,12 +154,13 @@ function buildShell() {
   root.querySelector(".os-hostline-text")!.textContent =
     host ? `${host.user}@${host.hostname} — ${host.distro}` : "WSL";
 
-  // 应用坞
-  root.querySelector(".os-dock")!.addEventListener("click", e => {
-    const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-app]");
-    if (!btn) return;
-    openApp(btn.dataset.app!);
-  });
+  // 应用坞 + 档案侧坞(同一分发)
+  root.querySelectorAll(".os-dock, .os-archive-dock").forEach(dock =>
+    dock.addEventListener("click", e => {
+      const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-app]");
+      if (!btn) return;
+      openApp(btn.dataset.app!);
+    }));
 
   // 桌面快捷键:Space 启动器、T 终端、/ 检索;捕获阶段先于主应用处理
   document.addEventListener("keydown", osKeydown, { capture: true });
@@ -209,11 +220,16 @@ function syncDockActive(openIds: string[]) {
   }
 }
 
-/** 桌面模式的进入/离开(main.ts setMode 调用)。 */
-export function setDesktopVisible(visible: boolean) {
+/** OS 层显隐与外壳形态(main.ts setMode 调用)。
+ * archive 外壳:隐藏 2D 桌面镶边(topbar/时钟/资源面板/大 Dock),仅保留
+ * 窗口层与紧凑侧坞——三维档案终端即桌面,桌面功能悬浮其上。 */
+export function setDesktopVisible(visible: boolean, shell: "desktop" | "archive" = "desktop") {
   if (!root) return;
   root.hidden = !visible;
   root.classList.toggle("active", visible);
+  root.classList.toggle("archive-shell", shell === "archive");
+  const adock = root.querySelector(".os-archive-dock") as HTMLElement | null;
+  if (adock) adock.hidden = !visible || shell !== "archive";
   if (visible) syncDockActive(wm.openIds);
 }
 

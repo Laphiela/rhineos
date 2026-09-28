@@ -44,7 +44,7 @@ import {
 } from "./motion-preferences";
 import { StartupGate } from "./startup";
 import { probeOS, mountOS, setDesktopVisible, osEnabled, osPowerOffSequence, osIdentityName } from "./os/desktop";
-import { applyFsDataset } from "./os/fs-archive";
+import { applyFsDataset, isFsDirectoryRecord } from "./os/fs-archive";
 import { isWallpaper, wallpaperHost, wallpaperFrame, type WallpaperProperties } from "./wallpaper";
 import "./startup.css";
 import "./wallpaper.css";
@@ -129,7 +129,8 @@ osReady.then(ok => {
   const footerUser = document.getElementById("footer-user");
   if (footerUser) footerUser.textContent = osIdentityName();
 });
-const bootTarget = (): Mode => (osEnabled() ? "desktop" : "archive");
+// RhineOS:开机落点即三维档案终端(档案 = 桌面);纯 2D 桌面经档案页脚 ⌂ DESKTOP 仍可进入
+const bootTarget = (): Mode => "archive";
 let frozenTime =
   reviewParams.get("freeze") === "1"
     ? Number(reviewParams.get("time") ?? 0)
@@ -388,8 +389,8 @@ function setMode(next: Mode) {
   mode = next;
   syncWallpaperBackground();
   audio.setScene(next === "desktop" ? "detail" : next);
-  // RhineOS:桌面模式下挂载/显示 OS 层
-  setDesktopVisible(next === "desktop");
+  // RhineOS:桌面/档案模式都显示 OS 层(archive 为无镶边外壳:窗口 + 侧坞悬浮于三维之上)
+  setDesktopVisible(next === "desktop" || (next === "archive" && osEnabled()), next === "archive" ? "archive" : "desktop");
   if (next !== "boot" && audioPreview) {
     audioPreview = false;
     audioPreviewRequest++;
@@ -519,6 +520,14 @@ function replayBootAfterModal(forcePreview: boolean) {
 }
 function openFile() {
   if (!ready) return;
+  // RhineOS:目录记录 = 进入该目录(真实文件系统导航);其余走原详情视图
+  if (osEnabled() && isFsDirectoryRecord(records[selected])) {
+    audio.play("tick");
+    void applyFsDataset(String(records[selected].source ?? "")).then(ok => {
+      if (ok) { rebuildFileTicks(); select(0); }
+    });
+    return;
+  }
   closeModal(() => {
     setMode("detail");
     audio.play("open");
@@ -1198,6 +1207,12 @@ async function start() {
         enterArchives: () => setMode("archive"),
         replayBoot: () => { audio.restartBoot(); bootStart = performance.now() / 1000; setMode("boot"); },
         powerOff: () => osPowerOffSequence(),
+        setTheme: (dark) => {
+          prefs.colorTheme = dark ? "dark" : "light";
+          savePrefs();
+          scene?.setTheme(dark, true); // 场景主题量即时跳变,帧循环随即接管涂色
+          paintTheme(dark ? 1 : 0);
+        },
       });
     }
     if (entry) entry.ready();

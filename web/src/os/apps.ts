@@ -4,7 +4,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { api, watchMetrics, formatBytes, formatUptime, type Metrics, type FsListing, type DesktopApp } from "./api";
 import type { WindowManager } from "./wm";
-import { paintTheme } from "../theme-ui";
+import type { DesktopCallbacks } from "./desktop";
 
 export type OSCallbacks = {
   enterArchives: () => void;
@@ -301,7 +301,7 @@ export async function mountLaunchpad(wm: WindowManager) {
 }
 
 // ---------------------------------------------------------------- 设置
-export function mountSettings(wm: WindowManager, callbacks: OSCallbacks) {
+export function mountSettings(wm: WindowManager, callbacks: DesktopCallbacks) {
   const body = wm.open({ id: "settings", title: "SYSTEM SETTINGS", subtitle: "系统设置", w: 640, h: 480 });
   body.classList.add("app-settings");
   const stored = readSettings();
@@ -319,8 +319,7 @@ export function mountSettings(wm: WindowManager, callbacks: OSCallbacks) {
   body.querySelectorAll("[data-os-theme]").forEach((btn: Element) =>
     btn.addEventListener("click", () => {
       const dark = (btn as HTMLElement).dataset.osTheme === "dark";
-      paintTheme(dark ? 1 : 0);
-      saveSettings({ colorTheme: dark ? "dark" : "light" });
+      callbacks.setTheme(dark); // 与主应用同路径(prefs + scene.setTheme),否则每帧被帧循环覆盖
       body.querySelectorAll("[data-os-theme]").forEach((b: Element) => b.setAttribute("aria-pressed", String(b === btn)));
     }));
   body.querySelector('[data-os-act="replay"]')!.addEventListener("click", () => { wm.close("settings"); callbacks.replayBoot(); });
@@ -346,20 +345,27 @@ export function mountAbout(wm: WindowManager) {
     <div class="about-note">非官方粉丝作品,与鹰角网络无关;视觉基线基于 LBEILC/RhineLabUI(MIT License)构建。</div>`;
 }
 
-export type PowerAction = "reboot" | "shutdown";
+export type PowerAction = "reboot" | "shutdown" | "lock" | "sleep" | "hibernate";
 export function mountPower(wm: WindowManager, callbacks: OSCallbacks) {
   const body = wm.open({ id: "power", title: "POWER", subtitle: "电源", w: 420, h: 300 });
   body.classList.add("app-power");
   body.innerHTML = `
     <div class="settings-kicker">POWER ／ 电源</div>
+    <div class="settings-kicker">SESSION ／ 会话</div>
     <button class="settings-line" data-os-power="reboot">重新启动 <span>重播开机序列</span></button>
     <button class="settings-line danger" data-os-power="shutdown">关机 <span>结束桌面会话并停止服务</span></button>
-    <div class="about-note">关机将停止 RhineOS 后端服务;重新进入请再次运行启动脚本。</div>`;
+    <div class="settings-kicker">WINDOWS HOST ／ 宿主机</div>
+    <button class="settings-line" data-os-power="lock">锁屏 <span>LOCK WORKSTATION</span></button>
+    <button class="settings-line" data-os-power="sleep">睡眠 <span>SUSPEND</span></button>
+    <button class="settings-line" data-os-power="hibernate">休眠 <span>HIBERNATE</span></button>
+    <div class="about-note">关机将停止 RhineOS 后端服务;重新进入请再次运行启动脚本。锁屏/睡眠/休眠作用于 Windows 宿主机。</div>`;
   body.querySelectorAll("[data-os-power]").forEach((btn: Element) => btn.addEventListener("click", () => {
     const act = (btn as HTMLElement).dataset.osPower as PowerAction;
     if (act === "shutdown" && !confirm("确认关机?后端服务将退出。")) return;
+    if ((act === "sleep" || act === "hibernate") && !confirm("确认让 Windows 宿主机进入该电源状态?")) return;
     wm.close("power");
     if (act === "reboot") callbacks.replayBoot();
+    else if (act === "lock" || act === "sleep" || act === "hibernate") void api.powerHost(act);
     else callbacks.powerOff();
   }));
 }

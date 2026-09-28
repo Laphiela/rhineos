@@ -19,6 +19,7 @@
   position: absolute;
   inset: 0;
   z-index: 8;
+  pointer-events: none; /* 全屏穿透:交互只由窗口/坞等子元素接管(archive 模式下保住三维交互) */
   color: var(--os-ink);
   font-family: inherit;
   opacity: 0;
@@ -27,6 +28,27 @@
 }
 .os-root.active { opacity: 1; }
 .os-root[hidden] { display: none; }
+/* archive 外壳:三维档案即桌面,仅窗口层 + 紧凑侧坞悬浮 */
+.os-root.archive-shell :is(.os-topbar, .os-wallpaper, .os-dock, .os-atmosphere) { display: none; }
+.os-archive-dock {
+  position: absolute; right: 18px; top: 50%; translate: 0 -50%;
+  display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--os-strong-line);
+  background: rgba(var(--os-paper-rgb), .9);
+  pointer-events: auto;
+}
+.os-archive-btn {
+  display: grid; justify-items: center; gap: 4px;
+  min-width: 62px; padding: 9px 8px 7px;
+  background: none; border: 1px solid transparent; color: var(--os-ink);
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.os-archive-btn:hover { border-color: var(--os-line); background: rgba(var(--os-paper-rgb), .95); }
+.os-archive-btn span { font-size: 19px; line-height: 1; font-weight: 300; }
+.os-archive-btn small { font-size: 10px; letter-spacing: 1.4px; color: var(--os-ink); opacity: .8; }
+.os-archive-btn.power span { color: var(--os-accent); }
 
 /* ---------------------------------------------------------------- 氛围:蓝图网格 + 角标 + 环 */
 .os-atmosphere { position: absolute; inset: 0; pointer-events: none; }
@@ -66,12 +88,12 @@
   backdrop-filter: blur(10px);
 }
 .os-topbar .os-brand h1 { font-size: 13px; letter-spacing: 4px; margin: 0; font-weight: 700; }
-.os-topbar .os-brand div { font-size: 8px; letter-spacing: 2.6px; color: var(--os-muted); margin-top: 2px; }
+.os-topbar .os-brand div { font-size: 8px; letter-spacing: 2.6px; color: var(--os-ink); opacity: .62; margin-top: 2px; }
 .os-topbar .os-brand p { display: none; }
 .os-hostinfo { display: flex; align-items: baseline; gap: 12px; font-size: 11px; }
 .os-hostinfo b { font-weight: 600; letter-spacing: .4px; }
-.os-hostinfo .os-distro { color: var(--os-muted); }
-.os-topmetrics { margin-left: auto; display: flex; gap: 20px; font-size: 10px; letter-spacing: 1.6px; color: var(--os-muted); }
+.os-hostinfo .os-distro { color: var(--os-ink); opacity: .72; }
+.os-topmetrics { margin-left: auto; display: flex; gap: 20px; font-size: 10px; letter-spacing: 1.6px; color: var(--os-ink); opacity: .8; }
 .os-topmetrics b { font-weight: 600; color: var(--os-ink); font-variant-numeric: tabular-nums; letter-spacing: .4px; }
 .os-topmetrics .os-uptime b { font-weight: 500; }
 
@@ -95,7 +117,7 @@
 }
 .os-date { display: flex; align-items: baseline; gap: 14px; margin-top: 4px; }
 .os-date-text { font-size: 15px; }
-.os-week { font-size: 11px; letter-spacing: 2.4px; color: var(--os-muted); }
+.os-week { font-size: 11px; letter-spacing: 2.4px; color: var(--os-ink); opacity: .72; }
 .os-host-line {
   margin-top: 26px; font-size: 11px; letter-spacing: 1.4px; color: var(--os-muted);
   display: flex; align-items: center; gap: 8px;
@@ -105,12 +127,12 @@
 
 .os-status-panel { position: absolute; top: 27%; right: 7%; width: min(30%, 380px); pointer-events: auto; }
 .os-status-rows { margin-top: 18px; display: grid; gap: 13px; }
-.os-status-row { display: grid; grid-template-columns: 42px 1fr 52px; align-items: center; gap: 12px; font-size: 11px; letter-spacing: 1.2px; color: var(--os-muted); }
+.os-status-row { display: grid; grid-template-columns: 42px 1fr 52px; align-items: center; gap: 12px; font-size: 11px; letter-spacing: 1.2px; color: var(--os-ink); opacity: .88; }
 .os-status-row b { font-weight: 500; color: var(--os-ink); text-align: right; font-variant-numeric: tabular-nums; letter-spacing: 0; }
 .os-bar { height: 2px; background: var(--os-strong-line); position: relative; overflow: hidden; }
 .os-bar i { position: absolute; inset: 0; right: auto; width: 0; background: var(--os-ink); transition: width 900ms cubic-bezier(.22, .8, .3, 1); }
 .os-status-row:first-child .os-bar i { background: var(--os-signal); }
-.os-status-note { margin-top: 22px; font-size: 12px; line-height: 1.9; color: var(--os-muted); }
+.os-status-note { margin-top: 22px; font-size: 12px; line-height: 1.9; color: var(--os-ink); opacity: .8; }
 .os-status-note span { color: var(--os-ink); }
 
 /* ---------------------------------------------------------------- 应用坞 */
@@ -138,7 +160,7 @@
 }
 .os-dock-btn.running::after { opacity: .9; }
 .os-dock-glyph { font-size: 21px; line-height: 1; font-weight: 300; }
-.os-dock-btn small { font-size: 10px; letter-spacing: 1.6px; color: var(--os-muted); }
+.os-dock-btn small { font-size: 11px; letter-spacing: 1.4px; color: var(--os-ink); opacity: .82; }
 .os-dock-btn.power .os-dock-glyph { color: var(--os-accent); }
 .os-dock-rule { width: 1px; background: var(--os-strong-line); margin: 8px 6px; }
 /* 桌面入场:应用坞自下而上浮入,与 .os-root 的淡入形成层次 */
