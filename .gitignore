@@ -1,0 +1,12 @@
+# 依赖与构建产物
+node_modules/
+web/dist/
+web/release/
+
+# 本机运行文档(含部署环境细节,不入库)
+docs/CONTINUATION.md
+
+# 杂项
+*.log
+.DS_Store
+__pycache__/
