@@ -1126,7 +1126,7 @@ document.fonts.addEventListener("loadingdone", () => documentDecryption.refresh(
 // RhineOS:开机动画停在 START PROCESSING 帧等场景热身(编译着色器),完成后放行
 let sceneWarmFrames = 0, sceneLastMs = 0, sceneWarm = false;
 let bootHoldSince = 0;
-const BOOT_HOLD_T = 17.3; // 传入时间轴;内部 t≈22.3 = START PROCESSING 帧,且场景 update 门(21.9)已开
+const BOOT_HOLD_T = 13.8; // 传入时间轴;内部 t≈18.8 = START PROCESSING… 帧(18.8-19.48 为 auth 步)
 
 let lastTime = 0,
   frameCount = 0,
@@ -1141,32 +1141,39 @@ function frame(ms: number) {
   paintTheme(theme);
   viewer?.setTheme(theme);
   playground?.tick(time);
+  const rawCinemaT = frozenTime ?? time - bootStart;
+  // RhineOS:场景未热身时动画停在 START PROCESSING 帧(最长 90s 强制放行)。
+  // 停帧期间开机 2D 序列完全遮住画布,让场景以「档案模式」在幕后渲染热身,
+  // 把入场字样/标签/材质的全部着色器编译都藏进这一帧,放行后即流畅。
+  const holdingBoot = !frozenTime && mode === "boot" && ready && !sceneWarm
+    && rawCinemaT > BOOT_HOLD_T && ms - (bootHoldSince || (bootHoldSince = ms)) < 90000;
+  if (holdingBoot) {
+    (window as unknown as { __rhineHold?: boolean }).__rhineHold = true;
+    showDatabaseStandby(); // 与所停帧同视觉 + 闪烁省略号:明确在等加载而非卡死
+  }
   const cinema =
     mode === "boot" && ready
-      ? bootFrame(
-          (() => {
-            const rawT = frozenTime ?? time - bootStart;
-            // 场景未热身且动画越过保持点:停在 START PROCESSING 帧(最长 90s 强制放行)
-            if (!frozenTime && mode === "boot" && !sceneWarm && rawT > BOOT_HOLD_T) {
-              bootHoldSince = bootHoldSince || ms;
-              if (ms - bootHoldSince < 90000) return BOOT_HOLD_T;
-            }
-            return rawT;
-          })(),
-        )
+      ? bootFrame(holdingBoot ? BOOT_HOLD_T : rawCinemaT)
       : undefined;
   wallpaperEffects?.update(time, motionIsReduced(), motionActive("pointerParallax"));
-  // RhineOS:WELCOME 尾段(26.56s 处切场景会冻结)预先挂待机层
   if (mode === "boot" && ready && cinema && cinema.time >= 24.6) showDatabaseStandby();
-  // The calibrated 2D opening fully covers the scene until array entry.
-  if (!viewer?.isOpen && (!cinema || cinema.time >= 21.9)) scene?.update(time, cinema);
-  { // RhineOS:场景连续 6 帧 <400ms 即视为热身完成,放行开机动画
+  // RhineOS:热身判定只认「档案路径」的帧——开机遮盖下的场景渲染是廉价子集,
+  // 在它上面达标会提前放行,真正的入场材质编译会拖到 SELE 字样处才发生。
+  const latchWarm = () => {
     const d = ms - sceneLastMs;
     sceneLastMs = ms;
     if (!sceneWarm && d > 0) {
       sceneWarmFrames = d < 400 ? sceneWarmFrames + 1 : 0;
       if (sceneWarmFrames >= 6) { sceneWarm = true; bootHoldSince = 0; }
     }
+  };
+  if (holdingBoot) {
+    scene?.update(time, undefined); // 档案路径热身(被开机序列遮盖,用户不可见)
+    latchWarm();
+  } else if (!viewer?.isOpen && (!cinema || cinema.time >= 21.9)) {
+    scene?.update(time, cinema);
+    if (!cinema) latchWarm(); // 已在档案模式
+    else sceneLastMs = ms;
   }
   tickDatabaseStandby(ms);
   viewer?.update(time);
