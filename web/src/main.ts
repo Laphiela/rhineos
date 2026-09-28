@@ -1125,7 +1125,7 @@ function frame(ms: number) {
   }
   const cinema =
     mode === "boot" && ready
-      ? bootFrame(holdActive ? 12.96 + (((ms - bootHoldSince) / 1000) % 0.48) : rawCinemaT)
+      ? bootFrame(holdActive ? 11.84 + (((ms - bootHoldSince) / 1000) % 2.6) : rawCinemaT)
       : undefined;
   wallpaperEffects?.update(time, motionIsReduced(), motionActive("pointerParallax"));
   if (holdActive) {
