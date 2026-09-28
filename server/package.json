@@ -1,0 +1,13 @@
+{
+  "name": "rhineos-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "RhineOS WSL backend — static host, PTY terminal, /proc metrics, filesystem and WSLg app launch APIs",
+  "main": "index.mjs",
+  "dependencies": {
+    "express": "^4.21.2",
+    "node-pty": "^1.0.0",
+    "ws": "^8.18.0"
+  }
+}
