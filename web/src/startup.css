@@ -10,3 +10,44 @@
   .loading-mark { width: 125px; margin-bottom: 32px; }
   .loading > span { font-size: 9px; letter-spacing: 1.3px; }
 }
+
+/* ---------------------------------------------------------------- 账号登录(RhineOS) */
+#account-login {
+  position: fixed; inset: 0; z-index: 70;
+  display: grid; place-items: center;
+  background: var(--theme-paper, #eae5e1);
+  color: var(--theme-ink, #080a08);
+  font-family: inherit;
+  transition: opacity 520ms ease;
+}
+#account-login.passed { opacity: 0; pointer-events: none; }
+#account-login.shake { animation: login-shake 420ms cubic-bezier(.36, .07, .19, .97); }
+@keyframes login-shake {
+  10%, 90% { translate: -1px 0; } 20%, 80% { translate: 2px 0; }
+  30%, 50%, 70% { translate: -4px 0; } 40%, 60% { translate: 4px 0; }
+}
+#account-login .login-brand { position: absolute; top: 40px; left: 48px; }
+#account-login .login-card { display: grid; gap: 26px; width: min(400px, 84vw); }
+#account-login .login-kicker { font-size: 11px; letter-spacing: 3px; color: var(--theme-ink); opacity: .66; }
+#account-login .login-kicker i { font-style: normal; opacity: .5; padding: 0 6px; }
+#account-login .login-user { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid rgba(8, 10, 8, .28); padding-bottom: 12px; }
+#account-login .login-user small { font-size: 10px; letter-spacing: 2.4px; opacity: .55; }
+#account-login .login-user b { font-size: 22px; font-weight: 600; letter-spacing: 2px; }
+#account-login .login-pass {
+  background: none; border: none; border-bottom: 1px solid rgba(8, 10, 8, .28);
+  padding: 10px 2px; font: inherit; font-size: 15px; letter-spacing: 2px;
+  color: inherit; outline: none;
+}
+#account-login .login-pass:focus { border-bottom-color: #ed821b; }
+#account-login .login-submit {
+  justify-self: start; display: inline-flex; align-items: center; gap: 12px;
+  padding: 12px 22px; background: none; cursor: pointer;
+  border: 1px solid rgba(8, 10, 8, .38); color: inherit;
+  font: inherit; font-size: 12px; letter-spacing: 2.6px;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+#account-login .login-submit:hover { border-color: #ed821b; background: rgba(237, 130, 27, .08); }
+#account-login .login-submit span { color: #ed821b; }
+#account-login .login-status { min-height: 1.2em; font-size: 11px; letter-spacing: 1.6px; opacity: .78; }
+#account-login .login-foot { position: absolute; bottom: 34px; left: 48px; font-size: 10px; letter-spacing: 2.2px; opacity: .55; }
+#account-login .login-foot i { display: inline-block; width: 22px; height: 1px; background: currentColor; vertical-align: middle; margin: 0 10px 3px; }

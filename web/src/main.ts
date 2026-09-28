@@ -43,7 +43,8 @@ import {
   type StoredMotion,
 } from "./motion-preferences";
 import { StartupGate } from "./startup";
-import { probeOS, mountOS, setDesktopVisible, osEnabled, osPowerOffSequence, osIdentityName } from "./os/desktop";
+import { probeOS, mountOS, setDesktopVisible, osEnabled, osPowerOffSequence, osIdentityName, osHostInfo } from "./os/desktop";
+import { api } from "./os/api";
 import { applyFsDataset, isFsDirectoryRecord } from "./os/fs-archive";
 import { isWallpaper, wallpaperHost, wallpaperFrame, type WallpaperProperties } from "./wallpaper";
 import "./startup.css";
@@ -376,6 +377,65 @@ function rebuildFileTicks() {
 const fileTicks: HTMLButtonElement[] = [];
 rebuildFileTicks();
 
+/** RhineOS:数据库待机过渡(复用 #loading 视觉:logo + 连接线 + 字距文案)。 */
+function showDatabaseStandby() {
+  if (document.getElementById("db-standby")) return;
+  const el = document.createElement("div");
+  el.id = "db-standby";
+  el.className = "loading";
+  el.innerHTML = `<div class="loading-mark">${logo}</div><span>INTERNAL DATABASE / LOADING</span><i></i>`;
+  $("#viewport").append(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    setTimeout(() => { el.classList.add("loaded"); setTimeout(() => el.remove(), 700); }, 1400);
+  }));
+}
+
+/** RhineOS:开机账号-密码验证(经后端 su 校验真实 Linux 口令);成功后 resolve。 */
+function accountLoginGate(): Promise<void> {
+  return new Promise(resolve => {
+    const host = osHostInfo();
+    const user = host?.user ?? "user";
+    const el = document.createElement("div");
+    el.id = "account-login";
+    el.innerHTML = `
+      <header class="login-brand">${brandHeading}</header>
+      <div class="login-card">
+        <div class="login-kicker">USER AUTHENTICATION <i>／</i> 身份验证</div>
+        <div class="login-user"><small>ACCOUNT</small><b>${escapeHtml(user)}</b></div>
+        <input class="login-pass" type="password" autocomplete="current-password" aria-label="密码" placeholder="PASSWORD" />
+        <button class="login-submit">AUTHENTICATE <span>↗</span></button>
+        <p class="login-status" role="status"></p>
+      </div>
+      <footer class="login-foot">SESSION AUTHORIZED <i></i> RHINE LAB · ANALYSIS OS</footer>
+    `;
+    const submit = async () => {
+      const pass = el.querySelector<HTMLInputElement>(".login-pass")!.value;
+      const status = el.querySelector<HTMLElement>(".login-status")!;
+      if (!pass) { status.textContent = "请输入密码 / PASSWORD REQUIRED"; return; }
+      status.textContent = "VERIFYING ／ 正在验证…";
+      try {
+        const r = await api.verifyPassword(pass);
+        if (r.ok) {
+          status.textContent = "ACCESS GRANTED ／ 已授权";
+          el.classList.add("passed");
+          setTimeout(() => { el.remove(); resolve(); }, 550);
+        } else {
+          status.textContent = "ACCESS DENIED ／ 密码不符";
+          el.classList.add("shake");
+          setTimeout(() => el.classList.remove("shake"), 450);
+          el.querySelector<HTMLInputElement>(".login-pass")!.select();
+        }
+      } catch (e) {
+        status.textContent = `验证服务不可用:${(e as Error).message}`;
+      }
+    };
+    el.querySelector(".login-submit")!.addEventListener("click", () => void submit());
+    el.querySelector(".login-pass")!.addEventListener("keydown", ev => { if ((ev as KeyboardEvent).key === "Enter") void submit(); });
+    $("#viewport").append(el);
+    el.querySelector<HTMLInputElement>(".login-pass")!.focus({ preventScroll: true });
+  });
+}
+
 function setMode(next: Mode) {
   if (workbench?.enabled && next === "detail") next = "archive";
   const previousMode = mode;
@@ -397,6 +457,8 @@ function setMode(next: Mode) {
     configureAudio();
   }
   $("#stage").dataset.mode = next;
+  // RhineOS:开机序列结束进入档案时,软渲染首帧可能仍在预热,给一段等待过渡
+  if (next === "archive" && mode === "boot") showDatabaseStandby();
   workbench?.syncVisibility();
   if (previousMode !== next) fit();
   $("#boot").inert = next !== "boot";
@@ -775,7 +837,12 @@ document.addEventListener("change", (e) => {
 });
 document.addEventListener("click", (e) => {
   const themeButton = (e.target as Element).closest<HTMLElement>("[data-color-theme]");
-  if (themeButton) { prefs.colorTheme = themeButton.dataset.colorTheme === "dark" ? "dark" : "light"; savePrefs(); return; }
+  if (themeButton) {
+    prefs.colorTheme = themeButton.dataset.colorTheme === "dark" ? "dark" : "light";
+    savePrefs();
+    paintTheme(prefs.colorTheme === "dark" ? 1 : 0); // 立即落色;场景动画随后由帧循环接管收敛
+    return;
+  }
   if (!started) return;
   if (modalClosing) return;
   const el = (e.target as Element).closest<HTMLElement>("button");
@@ -1215,6 +1282,8 @@ async function start() {
         },
       });
     }
+    // RhineOS:后端在位时要求真实账号-密码验证(自动化/预览路径跳过)
+    if (osEnabled() && !reviewEntry && !isWallpaper && !reviewParams.has("skip-login")) await accountLoginGate();
     if (entry) entry.ready();
     else {
       if (isWallpaper) {

@@ -79,6 +79,7 @@ export function mountFiles(wm: WindowManager, callbacks: OSCallbacks, startPath?
       <button class="files-go" title="转到">GO ↗</button>
       <button class="files-term" title="在此处打开终端">⌁ 终端</button>
       <button class="files-new" title="新建文件夹">＋ 目录</button>
+      <button class="files-newfile" title="新建文件">＋ 文件</button>
     </div>
     <div class="files-main">
       <div class="files-list" role="listbox" aria-label="目录内容"></div>
@@ -194,6 +195,10 @@ export function mountFiles(wm: WindowManager, callbacks: OSCallbacks, startPath?
   body.querySelector(".files-new")!.addEventListener("click", async () => {
     const name = prompt("新目录名称");
     if (name) { await api.mkdir(`${cwd}/${name}`); void navigate(cwd); }
+  });
+  body.querySelector(".files-newfile")!.addEventListener("click", async () => {
+    const name = prompt("新文件名称");
+    if (name) { await api.write(`${cwd}/${name}`, ""); void navigate(cwd); }
   });
   body.querySelector(".files-term")!.addEventListener("click", () => mountTerminal(wm, callbacks, cwd));
 

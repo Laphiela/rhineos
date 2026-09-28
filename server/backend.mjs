@@ -320,6 +320,29 @@ export async function startRhineosBackend(opts = {}) {
   });
   app.post("/api/power/reboot", (_req, res) => res.json({ ok: true }));
 
+  // 账号-密码验证:经 node-pty 驱动 su 校验当前用户的真实 Linux 口令
+  app.post("/api/auth/verify", async (req, res) => {
+    const password = String(req.body?.password ?? "");
+    const user = userInfo().username;
+    if (!password) return res.status(400).json({ ok: false, error: "缺少密码" });
+    if (!pty) return res.status(500).json({ ok: false, error: "PTY 不可用" });
+    const ok = await new Promise(resolve => {
+      let buf = "", done = false, wrote = 0;
+      const term = pty.spawn("su", ["-", user, "-c", "true"], { name: "xterm", cols: 80, rows: 24 });
+      const finish = v => { if (!done) { done = true; clearTimeout(timer); try { term.kill(); } catch {} resolve(v); } };
+      const timer = setTimeout(() => finish(false), 15000);
+      term.onData(d => {
+        buf += d;
+        const prompted = /密码|password/i.test(buf);
+        if (prompted && wrote < 2) { term.write(password + "\r"); wrote += 1; buf = ""; }
+        if (/Authentication failure|认证失败/i.test(buf)) finish(false);
+      });
+      setTimeout(() => { if (wrote === 0) { term.write(password + "\r"); wrote += 1; } }, 400);
+      term.onExit(({ exitCode }) => finish(exitCode === 0));
+    });
+    res.json({ ok });
+  });
+
   // 宿主机电源操作(WSL 直接执行 Windows 可执行文件)
   const WIN = "/mnt/c/Windows/System32";
   function powerHost(action) {

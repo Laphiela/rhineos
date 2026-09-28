@@ -100,7 +100,7 @@ function createWindow() {
     backgroundColor: "#000000",
     webPreferences: { contextIsolation: true },
   });
-  win.loadURL(`http://127.0.0.1:${backendPort}`);
+  win.loadURL(`http://127.0.0.1:${backendPort}${SHOT ? "/?skip-login=1" : ""}`);
   if (SHOT) { try { win.focus(); win.moveTop(); } catch {} }
   // 软渲染性能档注入 + 首次种子后重载一次使偏好立即生效
   win.webContents.on("did-finish-load", () => {

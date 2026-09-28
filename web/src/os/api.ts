@@ -61,6 +61,7 @@ export const api = {
 
   shutdown: () => post("/api/power/shutdown", {}),
   powerHost: (action: "lock" | "sleep" | "hibernate") => post(`/api/power/${action}`, {}),
+  verifyPassword: async (password: string) => (await post("/api/auth/verify", { password })) as { ok: boolean; error?: string },
 };
 
 /** 订阅周期指标(SSE 语义退化为轮询,2s 间隔足够桌面级仪表)。 */
