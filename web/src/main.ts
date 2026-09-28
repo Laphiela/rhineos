@@ -377,17 +377,46 @@ function rebuildFileTicks() {
 const fileTicks: HTMLButtonElement[] = [];
 rebuildFileTicks();
 
-/** RhineOS:数据库待机过渡(复用 #loading 视觉:logo + 连接线 + 字距文案)。 */
+/** RhineOS:数据库待机过渡(复用 #loading 视觉:logo + 旋转环 + 字距文案)。
+ * 覆盖切入三维时 SwiftShader 编译着色器的长冻结:挂上后一直等到渲染器
+ * 连续 8 帧 <250ms(真实流畅)才淡出;兜底 60s 强制收束。指示环为纯
+ * transform 动画,主线程冻结期间由合成器线程继续旋转。 */
+let standbyEl: HTMLElement | null = null;
+let standbySince = 0;
+let standbyWarm = 0;
+let standbyLastMs = 0;
+
 function showDatabaseStandby() {
-  if (document.getElementById("db-standby")) return;
+  if (standbyEl?.isConnected) return;
   const el = document.createElement("div");
   el.id = "db-standby";
-  el.className = "loading";
-  el.innerHTML = `<div class="loading-mark">${logo}</div><span>INTERNAL DATABASE / LOADING</span><i></i>`;
+  el.className = "loading db-standby";
+  el.innerHTML = `<div class="db-spin" aria-hidden="true"></div><div class="loading-mark">${logo}</div><span>INTERNAL DATABASE / LOADING</span><i></i>`;
   $("#viewport").append(el);
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    setTimeout(() => { el.classList.add("loaded"); setTimeout(() => el.remove(), 700); }, 1400);
-  }));
+  standbyEl = el;
+  standbySince = performance.now();
+  standbyWarm = 0;
+  standbyLastMs = 0;
+}
+
+function dismissDatabaseStandby() {
+  const el = standbyEl;
+  if (!el?.isConnected) { standbyEl = null; return; }
+  standbyEl = null;
+  el.classList.add("loaded");
+  setTimeout(() => el.remove(), 700);
+}
+
+/** 帧循环内调用:待机层在场时统计连续快速帧,流畅即收。 */
+function tickDatabaseStandby(ms: number) {
+  if (!standbyEl) return;
+  const held = ms - standbySince;
+  if (standbyLastMs && held > 4000) { // 最短展示 4s:切场景前的纯 DOM 帧很快,不许据此提前放行
+    const delta = ms - standbyLastMs;
+    standbyWarm = delta > 0 && delta < 400 ? standbyWarm + 1 : 0;
+    if (standbyWarm >= 6 || held > 60000) dismissDatabaseStandby();
+  }
+  standbyLastMs = ms;
 }
 
 /** RhineOS:开机账号-密码验证(经后端 su 校验真实 Linux 口令);成功后 resolve。 */
@@ -457,7 +486,7 @@ function setMode(next: Mode) {
     configureAudio();
   }
   $("#stage").dataset.mode = next;
-  // RhineOS:开机序列结束进入档案时,软渲染首帧可能仍在预热,给一段等待过渡
+  // RhineOS:切入档案时若待机层未挂(如减动画路径)则补挂
   if (next === "archive" && mode === "boot") showDatabaseStandby();
   workbench?.syncVisibility();
   if (previousMode !== next) fit();
@@ -1111,8 +1140,11 @@ function frame(ms: number) {
       ? bootFrame(frozenTime ?? time - bootStart)
       : undefined;
   wallpaperEffects?.update(time, motionIsReduced(), motionActive("pointerParallax"));
+  // RhineOS:WELCOME 尾段(26.56s 处切场景会冻结)预先挂待机层
+  if (mode === "boot" && ready && cinema && cinema.time >= 24.6) showDatabaseStandby();
   // The calibrated 2D opening fully covers the scene until array entry.
   if (!viewer?.isOpen && (!cinema || cinema.time >= 21.9)) scene?.update(time, cinema);
+  tickDatabaseStandby(ms);
   viewer?.update(time);
   if (threeState === "closing" && scene?.presentationHidden) releaseThree();
   playground?.position();

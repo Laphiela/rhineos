@@ -51,3 +51,15 @@
 #account-login .login-status { min-height: 1.2em; font-size: 11px; letter-spacing: 1.6px; opacity: .78; }
 #account-login .login-foot { position: absolute; bottom: 34px; left: 48px; font-size: 10px; letter-spacing: 2.2px; opacity: .55; }
 #account-login .login-foot i { display: inline-block; width: 22px; height: 1px; background: currentColor; vertical-align: middle; margin: 0 10px 3px; }
+
+/* 数据库待机:旋转环为纯 transform 动画(合成器线程驱动,主线程冻结时仍旋转) */
+.loading.db-standby > i { display: none; }
+.db-spin {
+  width: 34px; height: 34px; margin-bottom: 26px;
+  border: 1px solid rgba(8, 10, 8, .16); border-top-color: #ed821b;
+  border-radius: 50%;
+  animation: db-rotate 900ms linear infinite;
+  will-change: transform;
+}
+@keyframes db-rotate { to { transform: rotate(360deg); } }
+.loading.db-standby.loaded { opacity: 0; transition: opacity 650ms ease; }
