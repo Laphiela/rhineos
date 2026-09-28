@@ -52,14 +52,21 @@
 #account-login .login-foot { position: absolute; bottom: 34px; left: 48px; font-size: 10px; letter-spacing: 2.2px; opacity: .55; }
 #account-login .login-foot i { display: inline-block; width: 22px; height: 1px; background: currentColor; vertical-align: middle; margin: 0 10px 3px; }
 
-/* 数据库待机:旋转环为纯 transform 动画(合成器线程驱动,主线程冻结时仍旋转) */
+/* 数据库待机:对齐开机序列 START PROCESSING 帧;点动画用 opacity(will-change 合成器化) */
 .loading.db-standby > i { display: none; }
-.db-spin {
-  width: 34px; height: 34px; margin-bottom: 26px;
-  border: 1px solid rgba(8, 10, 8, .16); border-top-color: #ed821b;
-  border-radius: 50%;
-  animation: db-rotate 900ms linear infinite;
-  will-change: transform;
+.loading.db-standby .loading-mark { margin: 0; }
+.db-row { display: flex; align-items: center; gap: 64px; }
+.db-text {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 17px; letter-spacing: 2.6px; font-weight: 500;
 }
-@keyframes db-rotate { to { transform: rotate(360deg); } }
+.db-text::before { content: "▪"; font-size: 12px; }
+.db-dots { display: inline-flex; }
+.db-dots b {
+  font-weight: 400; opacity: 0; will-change: opacity;
+  animation: db-dot 1200ms infinite;
+}
+.db-dots b:nth-child(2) { animation-delay: 200ms; }
+.db-dots b:nth-child(3) { animation-delay: 400ms; }
+@keyframes db-dot { 0%, 60% { opacity: 1; } 61%, 100% { opacity: 0; } }
 .loading.db-standby.loaded { opacity: 0; transition: opacity 650ms ease; }

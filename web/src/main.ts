@@ -391,7 +391,8 @@ function showDatabaseStandby() {
   const el = document.createElement("div");
   el.id = "db-standby";
   el.className = "loading db-standby";
-  el.innerHTML = `<div class="db-spin" aria-hidden="true"></div><div class="loading-mark">${logo}</div><span>INTERNAL DATABASE / LOADING</span><i></i>`;
+  // 视觉对齐开机序列的 START PROCESSING 帧:logo + 闪烁省略号,像系统本就在处理
+  el.innerHTML = `<div class="db-row"><div class="loading-mark">${logo}</div><span class="db-text">START PROCESSING<i class="db-dots"><b>.</b><b>.</b><b>.</b></i></span></div>`;
   $("#viewport").append(el);
   standbyEl = el;
   standbySince = performance.now();
@@ -1122,6 +1123,11 @@ const documentDecryption = new DocumentDecryption();
 // redaction lines after font swap while retaining the current reveal progress.
 document.fonts.addEventListener("loadingdone", () => documentDecryption.refresh());
 
+// RhineOS:开机动画停在 START PROCESSING 帧等场景热身(编译着色器),完成后放行
+let sceneWarmFrames = 0, sceneLastMs = 0, sceneWarm = false;
+let bootHoldSince = 0;
+const BOOT_HOLD_T = 17.3; // 传入时间轴;内部 t≈22.3 = START PROCESSING 帧,且场景 update 门(21.9)已开
+
 let lastTime = 0,
   frameCount = 0,
   frameStart = performance.now(),
@@ -1137,13 +1143,31 @@ function frame(ms: number) {
   playground?.tick(time);
   const cinema =
     mode === "boot" && ready
-      ? bootFrame(frozenTime ?? time - bootStart)
+      ? bootFrame(
+          (() => {
+            const rawT = frozenTime ?? time - bootStart;
+            // 场景未热身且动画越过保持点:停在 START PROCESSING 帧(最长 90s 强制放行)
+            if (!frozenTime && mode === "boot" && !sceneWarm && rawT > BOOT_HOLD_T) {
+              bootHoldSince = bootHoldSince || ms;
+              if (ms - bootHoldSince < 90000) return BOOT_HOLD_T;
+            }
+            return rawT;
+          })(),
+        )
       : undefined;
   wallpaperEffects?.update(time, motionIsReduced(), motionActive("pointerParallax"));
   // RhineOS:WELCOME 尾段(26.56s 处切场景会冻结)预先挂待机层
   if (mode === "boot" && ready && cinema && cinema.time >= 24.6) showDatabaseStandby();
   // The calibrated 2D opening fully covers the scene until array entry.
   if (!viewer?.isOpen && (!cinema || cinema.time >= 21.9)) scene?.update(time, cinema);
+  { // RhineOS:场景连续 6 帧 <400ms 即视为热身完成,放行开机动画
+    const d = ms - sceneLastMs;
+    sceneLastMs = ms;
+    if (!sceneWarm && d > 0) {
+      sceneWarmFrames = d < 400 ? sceneWarmFrames + 1 : 0;
+      if (sceneWarmFrames >= 6) { sceneWarm = true; bootHoldSince = 0; }
+    }
+  }
   tickDatabaseStandby(ms);
   viewer?.update(time);
   if (threeState === "closing" && scene?.presentationHidden) releaseThree();
