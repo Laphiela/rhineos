@@ -1082,7 +1082,7 @@ document.fonts.addEventListener("loadingdone", () => documentDecryption.refresh(
 // RhineOS:开机动画停在 START PROCESSING 帧等场景热身(编译着色器),完成后放行
 let bootHoldSince = 0;
 let holdPrepared = false;
-let bootReleasePending = false; // 热身充分,待放行进入档案
+let holdDone = false; // 热身完成已恢复时间轴,本页不再停帧
 let holdWarm = 0, sceneLastMs = 0;
 const BOOT_HOLD_T = 13.8; // 传入时间轴;内部 t≈18.8 = START PROCESSING… 帧(18.8-19.48 为 auth 步)
 
@@ -1093,13 +1093,6 @@ let lastTime = 0,
 function frame(ms: number) {
   if (!wallpaperFrame(ms)) { requestAnimationFrame(frame); return; }
   if (document.hidden) { requestAnimationFrame(frame); return; }
-  // RhineOS:停帧热身完成 → 跳过剩余序列直接进入档案(待机层覆盖切换瞬间)
-  if (bootReleasePending && mode === "boot") {
-    bootReleasePending = false;
-    audio.play("ui-tick");
-    setMode(bootTarget());
-    return;
-  }
   workbench?.tick();
   const time = ms / 1000;
   const theme = scene?.themeAmount ?? (prefs.colorTheme === "dark" ? 1 : 0);
@@ -1113,7 +1106,7 @@ function frame(ms: number) {
   // RhineOS:档案未热身时,动画停在自身的 START PROCESSING 帧(点动画循环不歇),
   // 场景以档案模式在开机序列遮盖后渲染热身;热身充分(连续 10 帧 <900ms——
   // 软渲染现实帧率)或 45s 兜底后,跳过剩余序列直接进入档案。
-  const holdActive = !frozenTime && mode === "boot" && ready && !bootReleasePending
+  const holdActive = !frozenTime && mode === "boot" && ready && !holdDone
     && rawCinemaT > BOOT_HOLD_T && ms - (bootHoldSince || (bootHoldSince = ms)) < 45000;
   if (holdActive) {
     (window as unknown as { __rhineHold?: boolean }).__rhineHold = true;
@@ -1134,8 +1127,10 @@ function frame(ms: number) {
     sceneLastMs = ms;
     if (d > 0 && d < 900) holdWarm++; else holdWarm = 0;
     if ((holdWarm >= 10 && ms - bootHoldSince > 8000) || ms - bootHoldSince > 45000) {
-      bootReleasePending = true;
+      // 恢复:平移 bootStart 使动画时间从保持点(13.8)继续,扫描/WELCOME 正常播出
+      bootStart = ms / 1000 - BOOT_HOLD_T;
       holdWarm = 0;
+      holdDone = true;
     }
   } else {
     holdPrepared = false;
