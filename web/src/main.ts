@@ -1126,6 +1126,7 @@ document.fonts.addEventListener("loadingdone", () => documentDecryption.refresh(
 // RhineOS:开机动画停在 START PROCESSING 帧等场景热身(编译着色器),完成后放行
 let sceneWarmFrames = 0, sceneLastMs = 0, sceneWarm = false;
 let bootHoldSince = 0;
+let holdPrepared = false;
 const BOOT_HOLD_T = 13.8; // 传入时间轴;内部 t≈18.8 = START PROCESSING… 帧(18.8-19.48 为 auth 步)
 
 let lastTime = 0,
@@ -1150,6 +1151,13 @@ function frame(ms: number) {
   if (holdingBoot) {
     (window as unknown as { __rhineHold?: boolean }).__rhineHold = true;
     showDatabaseStandby(); // 与所停帧同视觉 + 闪烁省略号:明确在等加载而非卡死
+    // 关键:boot 态下场景被 setMode("hidden") 置为廉价渲染;热身前必须切入
+    // 真实档案态,否则 warm 统计的全是空状态帧,放行后 SELE 处照旧编译冻结
+    if (!holdPrepared) {
+      scene?.setMode("archive");
+      fit();
+      holdPrepared = true;
+    }
   }
   const cinema =
     mode === "boot" && ready
@@ -1170,10 +1178,13 @@ function frame(ms: number) {
   if (holdingBoot) {
     scene?.update(time, undefined); // 档案路径热身(被开机序列遮盖,用户不可见)
     latchWarm();
-  } else if (!viewer?.isOpen && (!cinema || cinema.time >= 21.9)) {
-    scene?.update(time, cinema);
-    if (!cinema) latchWarm(); // 已在档案模式
-    else sceneLastMs = ms;
+  } else {
+    holdPrepared = false;
+    if (!viewer?.isOpen && (!cinema || cinema.time >= 21.9)) {
+      scene?.update(time, cinema);
+      if (!cinema) latchWarm(); // 已在档案模式
+      else sceneLastMs = ms;
+    }
   }
   tickDatabaseStandby(ms);
   viewer?.update(time);
