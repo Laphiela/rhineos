@@ -487,8 +487,14 @@ function setMode(next: Mode) {
     configureAudio();
   }
   $("#stage").dataset.mode = next;
-  // RhineOS:切入档案时若待机层未挂(如减动画路径)则补挂
-  if (next === "archive" && mode === "boot") showDatabaseStandby();
+  // RhineOS:切入档案(开机序列后)时,待机层必须持续覆盖到真实渲染流畅:
+  // 立即挂/补挂,并重新计时——之前的"已流畅"计数在入场冻结面前不算数
+  if (next === "archive" && mode === "boot") {
+    showDatabaseStandby();
+    standbySince = performance.now();
+    standbyWarm = 0;
+    standbyLastMs = 0;
+  }
   workbench?.syncVisibility();
   if (previousMode !== next) fit();
   $("#boot").inert = next !== "boot";

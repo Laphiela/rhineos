@@ -47,6 +47,13 @@ const SW_PROFILE_JS = `(() => {
     if (!before) {
       localStorage.setItem("rhine-settings", JSON.stringify({ superPerformance: true, sound: false, music: false }));
       seeded = true;
+    } else if (!localStorage.getItem("rhineos-sw-migrated")) {
+      // 一次性迁移:已有配置的实例默认开启 SUPER PERFORMANCE(软渲染下全画质交互迟钝;
+      // 设置里可随时关闭,此迁移不会再执行)
+      const prefs = JSON.parse(before);
+      prefs.superPerformance = true;
+      localStorage.setItem("rhine-settings", JSON.stringify(prefs));
+      localStorage.setItem("rhineos-sw-migrated", "1");
     }
   } catch {}
   window.addEventListener("error", e => console.error("[err]", e.error?.stack || e.message));
